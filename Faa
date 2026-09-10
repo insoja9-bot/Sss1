@@ -1,0 +1,702 @@
+-- ==========================================
+--  Salah Hub - Blox Fruits
+--  واجهة عربية مرتبة | للأجهزة الجوال
+-- ==========================================
+
+local Players            = game:GetService("Players")
+local RunService         = game:GetService("RunService")
+local UserInputService   = game:GetService("UserInputService")
+local TweenService       = game:GetService("TweenService")
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local StarterGui         = game:GetService("StarterGui")
+local VirtualUser        = game:GetService("VirtualUser")
+local HttpService        = game:GetService("HttpService")
+
+local LocalPlayer        = Players.LocalPlayer
+local Camera             = workspace.CurrentCamera
+local Remotes            = ReplicatedStorage:WaitForChild("Remotes", 10)
+local CommF              = Remotes and Remotes:WaitForChild("CommF_", 10)
+local CommE              = Remotes and Remotes:WaitForChild("CommE", 10)
+
+-- ==========================================
+--  الإعدادات (Settings)
+-- ==========================================
+local S = {
+    -- الزراعة
+    AutoFarm        = false,
+    AutoQuest       = false,   -- يقبل المهمة تلقائياً
+    FarmMode        = "سيف",  -- "سيف" أو "فاكهة"
+    FarmDistance    = 25,
+
+    -- الصناديق الذكي
+    AutoChest       = false,
+    ChestMinDelay   = 0.8,    -- الحد الأدنى (لا تقلل عن هذا حتى ما يرجعك)
+    ChestMaxDelay   = 1.6,    -- الحد الأعلى
+    ChestRadius     = 500,    -- أقصى مسافة يروح لها
+
+    -- الفواكه
+    AutoFruit       = false,
+    FruitDelay      = 0.6,
+
+    -- القتال
+    AutoBuso        = false,
+    AutoHaki        = false,
+    AutoSword       = false,
+    FastAttack      = false,
+
+    -- الرؤية
+    ESP             = false,
+    ESPTeamCheck    = true,
+
+    -- أخرى
+    AntiAFK         = true,
+    NoClip          = false,
+}
+
+-- ==========================================
+--  المتغيرات العامة
+-- ==========================================
+local Connections = {}
+local espFolder
+
+local function addConn(c) table.insert(Connections, c) end
+local function clearConns()
+    for _, c in ipairs(Connections) do pcall(function() c:Disconnect() end) end
+    Connections = {}
+end
+
+-- ==========================================
+--  دوال مساعدة
+-- ==========================================
+local function getChar()
+    local c = LocalPlayer.Character
+    if c and c:FindFirstChild("HumanoidRootPart") and c:FindFirstChildOfClass("Humanoid") then
+        return c
+    end
+    return nil
+end
+
+local function getRoot()
+    local c = getChar()
+    return c and c.HumanoidRootPart or nil
+end
+
+local function notify(title, text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title, Text = text, Duration = 3,
+        })
+    end)
+end
+
+-- التحقق إن العدو حي وقريب
+local function isAlive(obj)
+    if not obj or not obj.Parent then return false end
+    local h = obj:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+
+-- ==========================================
+--  نظام الجزر (Blox Fruits Islands)
+-- ==========================================
+local Islands = {
+    ["Starter Island"]   = CFrame.new(1080, 20, 1500),
+    ["Marine Fort"]      = CFrame.new(-5000, 20, 4300),
+    ["Middle Town"]      = CFrame.new(-670, 20, 1500),
+    ["Jungle"]           = CFrame.new(-1600, 40, 350),
+    ["Pirate Village"]   = CFrame.new(-1160, 5, 3800),
+    ["Desert"]           = CFrame.new(1020, 5, 4300),
+    ["Frozen Village"]   = CFrame.new(1160, 5, -1300),
+    ["Marine Ford"]      = CFrame.new(-4420, 20, -6200),
+    ["Sky Island"]       = CFrame.new(-4760, 750, -3550),
+    ["Prison"]           = CFrame.new(5300, 5, 500),
+    ["Colosseum"]        = CFrame.new(-1420, 20, -3000),
+    ["Magma Village"]    = CFrame.new(-5200, 5, 800),
+    ["Underwater City"]  = CFrame.new(61150, 200, 1800),
+    ["Fountain City"]    = CFrame.new(5200, 5, 3900),
+    ["Fountain City 2"]  = CFrame.new(5600, 5, 3900),
+    ["Zombie Island"]    = CFrame.new(-6500, 5, -1400),
+    ["Cursed Ship"]      = CFrame.new(920, 120, 32800),
+    ["Ice Castle"]       = CFrame.new(5600, 30, -6200),
+    ["Forgotten Island"] = CFrame.new(-3040, 15, -5400),
+    ["Haunted Castle"]   = CFrame.new(-9500, 150, 6100),
+    ["Snow Mountain"]    = CFrame.new(1380, 90, -1550),
+    ["Hot and Cold"]     = CFrame.new(-5900, 15, -3800),
+    ["Kingdom of Rose"]  = CFrame.new(-200, 15, 4800),
+    ["Green Zone"]       = CFrame.new(-400, 5, 4700),
+    ["Graveyard"]        = CFrame.new(6800, 5, -5300),
+    ["Dark Arena"]       = CFrame.new(-8700, 60, -3500),
+    ["Cafe"]             = CFrame.new(-8500, 5, 7000),
+    ["Sea of Treats"]    = CFrame.new(-4500, 20, 22000),
+    ["Hydra Island"]     = CFrame.new(5600, 5, -700),
+    ["Great Tree"]       = CFrame.new(2100, 60, -6500),
+    ["Castle on the Sea"]= CFrame.new(-3250, 60, 5300),
+    ["Port Town"]        = CFrame.new(-300, 6, 5300),
+    ["Turtle Island"]    = CFrame.new(-12500, 8, -3500),
+    ["Mansion"]          = CFrame.new(-13500, 20, -4400),
+}
+
+local function travelTo(name)
+    local pos = Islands[name]
+    if not pos or not CommF then return end
+    pcall(function()
+        CommF:InvokeServer("TravelMain")
+        CommF:InvokeServer("TravelDressrosa")
+        CommF:InvokeServer("TravelZou")
+        -- الانتقال المباشر
+        local r = getRoot()
+        if r then r.CFrame = pos end
+    end)
+end
+
+-- ==========================================
+--  الزراعة الذكية (Auto Farm)
+-- ==========================================
+local function getClosestEnemy()
+    local root = getRoot()
+    if not root then return nil end
+    local best, bestD = nil, S.FarmDistance
+
+    -- البحث في كل مكان بالخريطة
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "HumanoidRootPart" and obj.Parent ~= LocalPlayer.Character then
+            local model = obj.Parent
+            if model and isAlive(model) then
+                local isEnemy = model:FindFirstChildOfClass("Humanoid") and 
+                    not Players:GetPlayerFromCharacter(model)
+                if isEnemy then
+                    local d = (obj.Position - root.Position).Magnitude
+                    if d < bestD then bestD, best = d, model end
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- قبول المهام تلقائياً
+local function autoAcceptQuest()
+    if not CommF then return end
+    pcall(function()
+        CommF:InvokeServer("StartQuest")
+    end)
+end
+
+-- إعادة المهمة عند نهايتها
+local function checkQuest()
+    if not CommF or not S.AutoQuest then return end
+    local lvl = LocalPlayer:GetAttribute("Level") or 1
+    pcall(function()
+        CommF:InvokeServer("StartQuest", "FirstSea", lvl)
+        CommF:InvokeServer("StartQuest", "SecondSea", lvl)
+        CommF:InvokeServer("StartQuest", "ThirdSea", lvl)
+    end)
+end
+
+-- ضرب العدو
+local function attack(target)
+    local char = getChar()
+    local root = getRoot()
+    if not char or not root or not target then return end
+    local tRoot = target:FindFirstChild("HumanoidRootPart")
+    if not tRoot then return end
+
+    -- الاقتراب
+    local offset = tRoot.CFrame.LookVector * -3 + Vector3.new(0, 0, 0)
+    pcall(function()
+        root.CFrame = CFrame.lookAt(tRoot.Position + offset, tRoot.Position)
+    end)
+
+    -- تفعيل السلاح
+    if S.AutoSword then
+        pcall(function() CommF:InvokeServer("StoreFruit", "Sword") end)
+    end
+
+    -- ضرب
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        pcall(function() tool:Activate() end)
+    end
+end
+
+-- حلقة الزراعة
+task.spawn(function()
+    while task.wait(0.15) do
+        if S.AutoFarm then
+            local enemy = getClosestEnemy()
+            if enemy then attack(enemy) end
+            if S.AutoQuest then checkQuest() end
+        end
+    end
+end)
+
+-- ==========================================
+--  صندوق ذكي (Auto Chest Smart)
+-- ==========================================
+local function getChests()
+    local chests = {}
+    local root = getRoot()
+    if not root then return chests end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("MeshPart") and obj.Name:lower():find("chest") then
+            local parent = obj.Parent
+            if parent and parent:FindFirstChild("HumanoidRootPart") then
+                local d = (parent.HumanoidRootPart.Position - root.Position).Magnitude
+                if d <= S.ChestRadius then
+                    table.insert(chests, parent)
+                end
+            end
+        end
+    end
+    return chests
+end
+
+task.spawn(function()
+    while task.wait() do
+        if S.AutoChest then
+            local chests = getChests()
+            if #chests > 0 then
+                -- نأخذ الأقرب
+                local root = getRoot()
+                if root then
+                    table.sort(chests, function(a, b)
+                        return (a.HumanoidRootPart.Position - root.Position).Magnitude <
+                               (b.HumanoidRootPart.Position - root.Position).Magnitude
+                    end)
+                    local target = chests[1]
+                    pcall(function()
+                        root.CFrame = target.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0)
+                    end)
+                    -- تأخير عشوائي ذكي (حتى ما يرجعك)
+                    task.wait(math.random(S.ChestMinDelay * 10, S.ChestMaxDelay * 10) / 10)
+                end
+            else
+                task.wait(0.5)
+            end
+        else
+            task.wait(0.3)
+        end
+    end
+end)
+
+-- ==========================================
+--  صيد الفواكه (Fruit Sniper)
+-- ==========================================
+task.spawn(function()
+    while task.wait() do
+        if S.AutoFruit then
+            local root = getRoot()
+            if root then
+                for _, obj in ipairs(workspace:GetChildren()) do
+                    if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
+                        pcall(function()
+                            root.CFrame = obj.Handle.CFrame + Vector3.new(0, 3, 0)
+                        end)
+                        task.wait(S.FruitDelay)
+                    end
+                end
+            end
+        end
+        task.wait(0.2)
+    end
+end)
+
+-- ==========================================
+--  Buso / Haki / FastAttack
+-- ==========================================
+task.spawn(function()
+    while task.wait(0.5) do
+        if S.AutoBuso and CommF then
+            pcall(function() CommF:InvokeServer("Buso") end)
+        end
+        if S.AutoHaki and CommF then
+            pcall(function() CommF:InvokeServer("Haki") end)
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait() do
+        if S.FastAttack then
+            local char = getChar()
+            if char then
+                for _, t in ipairs(char:GetChildren()) do
+                    if t:IsA("Tool") then pcall(function() t:Activate() end) end
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+--  ESP
+-- ==========================================
+task.spawn(function()
+    while task.wait(1) do
+        if S.ESP then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local root = p.Character:FindFirstChild("HumanoidRootPart")
+                    if root and not root:FindFirstChild("SalahESP") then
+                        local bb = Instance.new("BillboardGui")
+                        bb.Name = "SalahESP"
+                        bb.Adornee = root
+                        bb.Size = UDim2.new(0, 120, 0, 40)
+                        bb.StudsOffset = Vector3.new(0, 3, 0)
+                        bb.AlwaysOnTop = true
+                        bb.Parent = root
+
+                        local lbl = Instance.new("TextLabel")
+                        lbl.Size = UDim2.new(1, 0, 1, 0)
+                        lbl.BackgroundTransparency = 1
+                        lbl.Text = p.Name .. " [" .. math.floor(p.Character:FindFirstChildOfClass("Humanoid").Health) .. "]"
+                        lbl.TextColor3 = Color3.fromRGB(255, 60, 60)
+                        lbl.TextStrokeTransparency = 0
+                        lbl.TextScaled = true
+                        lbl.Font = Enum.Font.GothamBold
+                        lbl.Parent = bb
+                    end
+                end
+            end
+        else
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character then
+                    local r = p.Character:FindFirstChild("HumanoidRootPart")
+                    if r then
+                        local e = r:FindFirstChild("SalahESP")
+                        if e then e:Destroy() end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+--  Anti-AFK + NoClip
+-- ==========================================
+LocalPlayer.Idled:Connect(function()
+    if S.AntiAFK then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    if S.NoClip then
+        local char = getChar()
+        if char then
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") and p.CanCollide then
+                    p.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+--  واجهة المستخدم - Salah Hub
+-- ==========================================
+local MainGui = Instance.new("ScreenGui")
+MainGui.Name = "SalahHub"
+MainGui.ResetOnSpawn = false
+MainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+MainGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- زر فتح/إغلاق
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 55, 0, 55)
+ToggleBtn.Position = UDim2.new(0, 15, 0.5, -27)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+ToggleBtn.Text = "S"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextScaled = true
+ToggleBtn.Font = Enum.Font.GothamBlack
+ToggleBtn.Parent = MainGui
+
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", ToggleBtn).Color = Color3.fromRGB(255, 255, 255)
+
+-- النافذة الرئيسية
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 320, 0, 380)
+Main.Position = UDim2.new(0.5, -160, 0.5, -190)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+Main.BorderSizePixel = 0
+Main.Visible = false
+Main.Parent = MainGui
+
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+local mainStroke = Instance.new("UIStroke", Main)
+mainStroke.Color = Color3.fromRGB(255, 140, 0)
+mainStroke.Thickness = 2
+
+-- العنوان
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 45)
+Title.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+Title.Text = "SALAH HUB"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBlack
+Title.TextScaled = true
+Title.Parent = Main
+
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
+-- إصلاح الزوايا السفلية
+local fixTitle = Instance.new("Frame")
+fixTitle.Size = UDim2.new(1, 0, 0, 12)
+fixTitle.Position = UDim2.new(0, 0, 1, -12)
+fixTitle.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+fixTitle.BorderSizePixel = 0
+fixTitle.Parent = Title
+
+-- شريط التبويبات
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -10, 0, 35)
+TabBar.Position = UDim2.new(0, 5, 0, 50)
+TabBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+TabBar.BorderSizePixel = 0
+TabBar.Parent = Main
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
+
+local TabLayout = Instance.new("UIListLayout", TabBar)
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.Padding = UDim.new(0, 3)
+TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+TabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+
+local ContentArea = Instance.new("ScrollingFrame")
+ContentArea.Size = UDim2.new(1, -10, 1, -95)
+ContentArea.Position = UDim2.new(0, 5, 0, 90)
+ContentArea.BackgroundTransparency = 1
+ContentArea.BorderSizePixel = 0
+ContentArea.ScrollBarThickness = 4
+ContentArea.CanvasSize = UDim2.new(0, 0, 0, 0)
+ContentArea.Parent = Main
+
+local ContentLayout = Instance.new("UIListLayout", ContentArea)
+ContentLayout.Padding = UDim.new(0, 6)
+ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- ==========================================
+--  دالة إنشاء زر التبديل (Toggle)
+-- ==========================================
+local function makeToggle(parent, text, default, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 38)
+    btn.BackgroundColor3 = default and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(35, 35, 45)
+    btn.Text = "  " .. text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.AutoButtonColor = false
+    btn.Parent = parent
+
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    local st = Instance.new("UIStroke", btn)
+    st.Color = Color3.fromRGB(255, 140, 0)
+    st.Thickness = 1
+    st.Transparency = default and 0 or 0.7
+
+    local state = default
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.BackgroundColor3 = state and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(35, 35, 45)
+        st.Transparency = state and 0 or 0.7
+        if callback then callback(state) end
+    end)
+    return btn, function() return state end
+end
+
+-- ==========================================
+--  دالة إنشاء زر عادي (Button)
+-- ==========================================
+local function makeButton(parent, text, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 38)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    btn.Text = "  " .. text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    btn.Parent = parent
+
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    local st = Instance.new("UIStroke", btn)
+    st.Color = Color3.fromRGB(255, 140, 0)
+    st.Thickness = 1
+    st.Transparency = 0.7
+
+    btn.MouseButton1Click:Connect(function()
+        if callback then callback() end
+    end)
+    return btn
+end
+
+-- ==========================================
+--  التبويبات (Tabs)
+-- ==========================================
+local Tabs = {}
+
+local function clearContent()
+    for _, c in ipairs(ContentArea:GetChildren()) do
+        if not c:IsA("UIListLayout") then c:Destroy() end
+    end
+end
+
+local function buildFarm()
+    clearContent()
+    makeToggle(ContentArea, "🌾 الزراعة التلقائية", S.AutoFarm, function(v) S.AutoFarm = v end)
+    makeToggle(ContentArea, "📜 قبول المهام تلقائياً", S.AutoQuest, function(v) S.AutoQuest = v end)
+    makeToggle(ContentArea, "⚔️ تفعيل السيف", S.AutoSword, function(v) S.AutoSword = v end)
+    makeToggle(ContentArea, "🔥 Busoshoku Haki", S.AutoBuso, function(v) S.AutoBuso = v end)
+    makeToggle(ContentArea, "👁️ Ken Haki", S.AutoHaki, function(v) S.AutoHaki = v end)
+    makeToggle(ContentArea, "⚡ هجوم سريع", S.FastAttack, function(v) S.FastAttack = v end)
+end
+
+local function buildChest()
+    clearContent()
+    makeToggle(ContentArea, "📦 جمع الصناديق (ذكي)", S.AutoChest, function(v) S.AutoChest = v end)
+    makeToggle(ContentArea, "🍎 صيد الفواكه", S.AutoFruit, function(v) S.AutoFruit = v end)
+
+    -- إعداد السرعة
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -10, 0, 25)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = "⚙️ سرعة جمع الصناديق"
+    lbl.TextColor3 = Color3.fromRGB(255, 200, 100)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = ContentArea
+
+    makeButton(ContentArea, "🐢 بطيء (آمن جداً)", function()
+        S.ChestMinDelay, S.ChestMaxDelay = 1.2, 2.0
+        notify("Salah Hub", "الوضع البطيء مفعّل")
+    end)
+    makeButton(ContentArea, "⚖️ متوازن (موصى به)", function()
+        S.ChestMinDelay, S.ChestMaxDelay = 0.8, 1.6
+        notify("Salah Hub", "الوضع المتوازن مفعّل")
+    end)
+    makeButton(ContentArea, "🐇 سريع (مخاطرة)", function()
+        S.ChestMinDelay, S.ChestMaxDelay = 0.5, 1.0
+        notify("Salah Hub", "تحذير: قد يرجعك السيرفر!")
+    end)
+end
+
+local function buildVisual()
+    clearContent()
+    makeToggle(ContentArea, "👁️ ESP للاعبين", S.ESP, function(v) S.ESP = v end)
+    makeToggle(ContentArea, "🚫 تعطيل الاصطدام (NoClip)", S.NoClip, function(v) S.NoClip = v end)
+    makeToggle(ContentArea, "🛡️ منع الطرد (Anti-AFK)", S.AntiAFK, function(v) S.AntiAFK = v end)
+end
+
+local function buildTravel()
+    clearContent()
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -10, 0, 25)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = "🗺️ اختر الجزيرة للانتقال:"
+    lbl.TextColor3 = Color3.fromRGB(255, 200, 100)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = ContentArea
+
+    local names = {
+        "Starter Island", "Marine Fort", "Middle Town", "Jungle",
+        "Pirate Village", "Desert", "Frozen Village", "Marine Ford",
+        "Sky Island", "Prison", "Colosseum", "Magma Village",
+        "Underwater City", "Fountain City", "Zombie Island",
+        "Cursed Ship", "Ice Castle", "Forgotten Island",
+        "Haunted Castle", "Snow Mountain", "Kingdom of Rose",
+        "Graveyard", "Dark Arena", "Great Tree", "Port Town",
+        "Turtle Island", "Mansion",
+    }
+    for _, name in ipairs(names) do
+        makeButton(ContentArea, "📍 " .. name, function()
+            travelTo(name)
+            notify("Salah Hub", "تم الانتقال إلى: " .. name)
+        end)
+    end
+end
+
+-- إنشاء أزرار التبويبات
+local function makeTab(name, builder)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 55, 1, -8)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.Parent = TabBar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        for _, b in ipairs(TabBar:GetChildren()) do
+            if b:IsA("TextButton") then
+                b.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+            end
+        end
+        btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+        builder()
+    end)
+    return btn
+end
+
+local farmTab   = makeTab("زراعة", buildFarm)
+local chestTab  = makeTab("صناديق", buildChest)
+local visualTab = makeTab("رؤية", buildVisual)
+local travelTab = makeTab("تنقل", buildTravel)
+
+-- الزر الافتراضي
+farmTab.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+buildFarm()
+
+-- ==========================================
+--  فتح/إغلاق النافذة
+-- ==========================================
+ToggleBtn.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
+end)
+
+-- ==========================================
+--  السحب للزر والنافذة
+-- ==========================================
+local function makeDraggable(obj, handle)
+    local dragging, dragStart, startPos
+    handle = handle or obj
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = obj.Position
+        end
+    end)
+    handle.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local d = input.Position - dragStart
+            obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+    handle.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+end
+
+makeDraggable(Main, Title)
+makeDraggable(ToggleBtn)
+
+-- ==========================================
+--  رسالة الترحيب
+-- ==========================================
+notify("Salah Hub 🎯", "تم التشغيل! اضغط على زر S لفتح القائمة")
+print("✅ Salah Hub شغّال - Blox Fruits")
